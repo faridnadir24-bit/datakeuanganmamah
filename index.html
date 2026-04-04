@@ -396,7 +396,6 @@ async function api(params){
     throw e;
   }
 }
-}
 
 async function fetchAnggota(){
   if(!SCRIPT_URL) return;
@@ -461,34 +460,39 @@ async function syncNow(){
 
 // ===================== INIT =====================
 function hideLoading(){
-  const el=document.getElementById("loadingScreen");
-  el.style.opacity="0";
-  setTimeout(()=>el.classList.add("hidden"),400);
+  const el=document.getElementById('loadingScreen');
+  el.style.opacity='0';
+  el.style.transition='opacity 0.4s';
+  setTimeout(()=>el.classList.add('hidden'),400);
 }
 
 async function init(){
-  const safetyTimer=setTimeout(()=>{
-    hideLoading();
-    renderAll();
-    showToast("Koneksi lambat — tampil data cache","info");
-  },8000);
+  // Load cache first so UI shows immediately
   try{
     const cached=localStorage.getItem(LS_DATA_KEY);
     if(cached) anggota=JSON.parse(cached);
     const cachedP=localStorage.getItem(LS_PAKET_KEY);
     if(cachedP) pakets=JSON.parse(cachedP);
-    if(SCRIPT_URL){
-      document.getElementById("setupBanner").classList.add("hidden");
+  }catch(e){}
+
+  // Show UI immediately with cached data
+  renderAll();
+  hideLoading();
+
+  // Then try to sync in background
+  if(SCRIPT_URL){
+    document.getElementById('setupBanner').classList.add('hidden');
+    setSyncStatus('syncing');
+    try{
       await Promise.all([fetchAnggota(), fetchPakets()]);
-    } else {
-      document.getElementById("setupBanner").classList.remove("hidden");
+      renderAll();
+    }catch(e){
+      setSyncStatus('err');
+      showToast('Gagal konek Sheets, pakai data lokal','error');
     }
-    renderAll();
-  } catch(e){
-    renderAll();
-  } finally {
-    clearTimeout(safetyTimer);
-    hideLoading();
+  } else {
+    document.getElementById('setupBanner').classList.remove('hidden');
+    setSyncStatus('err');
   }
 }
 
