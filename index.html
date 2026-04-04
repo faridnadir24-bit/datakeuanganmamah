@@ -383,10 +383,19 @@ function saveScriptUrl(){
 
 // ===================== API =====================
 async function api(params){
-  if(!SCRIPT_URL) throw new Error('No script URL');
-  const url=SCRIPT_URL+'?'+new URLSearchParams(params).toString();
-  const res=await fetch(url);
-  return res.json();
+  if(!SCRIPT_URL) throw new Error("No script URL");
+  const url=SCRIPT_URL+"?"+new URLSearchParams(params).toString();
+  const controller=new AbortController();
+  const timer=setTimeout(()=>controller.abort(),10000);
+  try{
+    const res=await fetch(url,{signal:controller.signal});
+    clearTimeout(timer);
+    return res.json();
+  }catch(e){
+    clearTimeout(timer);
+    throw e;
+  }
+}
 }
 
 async function fetchAnggota(){
@@ -451,26 +460,36 @@ async function syncNow(){
 }
 
 // ===================== INIT =====================
-async function init(){
-  document.getElementById('loadingScreen').classList.remove('hidden');
-  document.getElementById('loadingScreen').style.opacity='1';
-  document.getElementById('loadingScreen').style.pointerEvents='auto';
+function hideLoading(){
+  const el=document.getElementById("loadingScreen");
+  el.style.opacity="0";
+  setTimeout(()=>el.classList.add("hidden"),400);
+}
 
-  if(!SCRIPT_URL){
-    document.getElementById('setupBanner').classList.remove('hidden');
-    // Load from cache if any
+async function init(){
+  const safetyTimer=setTimeout(()=>{
+    hideLoading();
+    renderAll();
+    showToast("Koneksi lambat — tampil data cache","info");
+  },8000);
+  try{
     const cached=localStorage.getItem(LS_DATA_KEY);
     if(cached) anggota=JSON.parse(cached);
     const cachedP=localStorage.getItem(LS_PAKET_KEY);
     if(cachedP) pakets=JSON.parse(cachedP);
+    if(SCRIPT_URL){
+      document.getElementById("setupBanner").classList.add("hidden");
+      await Promise.all([fetchAnggota(), fetchPakets()]);
+    } else {
+      document.getElementById("setupBanner").classList.remove("hidden");
+    }
     renderAll();
-  } else {
-    document.getElementById('setupBanner').classList.add('hidden');
-    await Promise.all([fetchAnggota(), fetchPakets()]);
+  } catch(e){
     renderAll();
+  } finally {
+    clearTimeout(safetyTimer);
+    hideLoading();
   }
-
-  document.getElementById('loadingScreen').classList.add('hidden');
 }
 
 // ===================== VIEWS =====================
