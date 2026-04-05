@@ -726,93 +726,44 @@ function renderAnalitik(){
 
 // ===================== EXPORT =====================
 function exportExcel(){
-  const wb = XLSX.utils.book_new();
-
-  // Build data rows
-  const ws_data = [
-    ['No','Nama','Jenis Paket','Bulan',...Array(MONTHS.length-1).fill(''),'Total'],
-    ['','','', ...MONTHS,'']
-  ];
-  anggota.forEach((a,i)=>{
-    const rowTotal = a.bulan.reduce((s,b)=>s+(b||0),0);
-    ws_data.push([i+1, a.nama, a.paket, ...a.bulan.map(b=>b!==null&&b!==undefined?b:''), rowTotal]);
-  });
-  // Total row
-  const monthTotals = MONTHS.map((_,mi)=>anggota.reduce((s,a)=>s+(a.bulan[mi]||0),0));
-  const grandTotal = anggota.reduce((s,a)=>s+a.bulan.reduce((ss,b)=>ss+(b||0),0),0);
-  ws_data.push(['','Total','', ...monthTotals, grandTotal]);
-
-  const ws = XLSX.utils.aoa_to_sheet(ws_data);
-
-  // Column widths
-  ws['!cols'] = [{wch:5},{wch:22},{wch:12},...MONTHS.map(()=>({wch:11})),{wch:10}];
-
-  // Merges for header
-  ws['!merges'] = [
-    {s:{r:0,c:0},e:{r:1,c:0}},
-    {s:{r:0,c:1},e:{r:1,c:1}},
-    {s:{r:0,c:2},e:{r:1,c:2}},
-    {s:{r:0,c:3},e:{r:0,c:3+MONTHS.length-1}},
-    {s:{r:0,c:3+MONTHS.length},e:{r:1,c:3+MONTHS.length}}
-  ];
-
-  // Apply cell styles
-  const range = XLSX.utils.decode_range(ws['!ref']);
-  for(let R=0; R<=range.e.r; R++){
-    for(let C=0; C<=range.e.c; C++){
-      const addr = XLSX.utils.encode_cell({r:R,c:C});
-      if(!ws[addr]) ws[addr] = {v:'', t:'s'};
-      if(!ws[addr].s) ws[addr].s = {};
-
-      // Header rows styling
-      if(R<=1){
-        ws[addr].s = {
-          fill:{fgColor:{rgb:'1E2333'}},
-          font:{bold:true, color:{rgb:'4F8EF7'}},
-          alignment:{horizontal:'center',vertical:'center'},
-          border:{bottom:{style:'medium',color:{rgb:'4F8EF7'}}}
-        };
-      }
-
-      // Data rows - color kurang/lebih
-      if(R>=2 && R<ws_data.length-1 && C>=3 && C<3+MONTHS.length){
-        const a = anggota[R-2];
-        if(a){
-          const b = a.bulan[C-3];
-          const harga = getHarga(a.paket);
-          if(b!==null && b!==undefined && b!==''){
-            if(b < harga){
-              ws[addr].s = {font:{color:{rgb:'EF4444'}},fill:{fgColor:{rgb:'FEE2E2'}}};
-            } else if(b > harga){
-              ws[addr].s = {font:{color:{rgb:'16A34A'}},fill:{fgColor:{rgb:'DCFCE7'}}};
-            }
-          }
-        }
-      }
-
-      // Total row styling
-      if(R===ws_data.length-1){
-        ws[addr].s = {
-          font:{bold:true, color:{rgb:'4F8EF7'}},
-          fill:{fgColor:{rgb:'181C27'}},
-          border:{top:{style:'medium',color:{rgb:'4F8EF7'}}}
-        };
-      }
-
-      // Total column styling
-      if(C===3+MONTHS.length && R>=2){
-        ws[addr].s = Object.assign(ws[addr].s||{},{
-          font:{bold:true, color:{rgb:'7C5CFC'}},
-          fill:{fgColor:{rgb:'EDE9FE'}}
-        });
-      }
+  try{
+    if(typeof XLSX === 'undefined'){
+      showToast('Library Excel belum siap, tunggu sebentar lalu coba lagi','error');
+      return;
     }
-  }
 
-  XLSX.utils.book_append_sheet(wb,'Sheet1',ws);
-  const fname='kasir_mamah_'+new Date().toLocaleDateString('id-ID').replace(/\//g,'-')+'.xlsx';
-  XLSX.writeFile(wb, fname, {bookType:'xlsx', cellStyles:true});
-  showToast('✅ Excel berhasil diunduh: '+fname);
+    const wb = XLSX.utils.book_new();
+    const ws_data = [
+      ['No','Nama','Jenis Paket',...MONTHS,'Total'],
+    ];
+    anggota.forEach((a,i)=>{
+      const rowTotal = a.bulan.reduce((s,b)=>s+(b||0),0);
+      ws_data.push([i+1, a.nama, a.paket, ...a.bulan.map(b=>b!==null&&b!==undefined?b:''), rowTotal]);
+    });
+    const monthTotals = MONTHS.map((_,mi)=>anggota.reduce((s,a)=>s+(a.bulan[mi]||0),0));
+    const grandTotal = anggota.reduce((s,a)=>s+a.bulan.reduce((ss,b)=>ss+(b||0),0),0);
+    ws_data.push(['','Total','', ...monthTotals, grandTotal]);
+
+    const ws = XLSX.utils.aoa_to_sheet(ws_data);
+    ws['!cols'] = [{wch:5},{wch:22},{wch:12},...MONTHS.map(()=>({wch:11})),{wch:10}];
+
+    XLSX.utils.book_append_sheet(wb,'Data',ws);
+
+    // Use blob download for maximum compatibility
+    const wbout = XLSX.write(wb, {bookType:'xlsx', type:'array'});
+    const blob = new Blob([wbout], {type:'application/octet-stream'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'kasir_mamah_'+new Date().toLocaleDateString('id-ID').replace(/\//g,'-')+'.xlsx';
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(()=>{ URL.revokeObjectURL(url); document.body.removeChild(a); }, 1000);
+    showToast('✅ Excel berhasil diunduh!');
+  } catch(err){
+    console.error('Export error:',err);
+    showToast('Gagal export: '+err.message,'error');
+  }
 }
 
 // ===================== IMPORT =====================
