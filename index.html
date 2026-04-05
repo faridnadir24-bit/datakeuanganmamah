@@ -728,40 +728,57 @@ function renderAnalitik(){
 function exportExcel(){
   try{
     if(typeof XLSX === 'undefined'){
-      showToast('Library Excel belum siap, tunggu sebentar lalu coba lagi','error');
+      showToast('Library Excel belum siap, coba refresh dulu','error');
       return;
     }
 
-    const wb = XLSX.utils.book_new();
-    const ws_data = [
-      ['No','Nama','Jenis Paket',...MONTHS,'Total'],
-    ];
-    anggota.forEach((a,i)=>{
-      const rowTotal = a.bulan.reduce((s,b)=>s+(b||0),0);
-      ws_data.push([i+1, a.nama, a.paket, ...a.bulan.map(b=>b!==null&&b!==undefined?b:''), rowTotal]);
+    // Build rows as plain arrays - most compatible way
+    const header1 = ['No','Nama','Jenis Paket'].concat(MONTHS).concat(['Total']);
+    const rows = [header1];
+
+    anggota.forEach(function(a, i){
+      const rowTotal = a.bulan.reduce(function(s,b){return s+(b||0);},0);
+      const bulanVals = a.bulan.map(function(b){return (b!==null&&b!==undefined)?b:'';});
+      rows.push([i+1, a.nama, a.paket].concat(bulanVals).concat([rowTotal]));
     });
-    const monthTotals = MONTHS.map((_,mi)=>anggota.reduce((s,a)=>s+(a.bulan[mi]||0),0));
-    const grandTotal = anggota.reduce((s,a)=>s+a.bulan.reduce((ss,b)=>ss+(b||0),0),0);
-    ws_data.push(['','Total','', ...monthTotals, grandTotal]);
 
-    const ws = XLSX.utils.aoa_to_sheet(ws_data);
-    ws['!cols'] = [{wch:5},{wch:22},{wch:12},...MONTHS.map(()=>({wch:11})),{wch:10}];
+    const monthTotals = MONTHS.map(function(_,mi){
+      return anggota.reduce(function(s,a){return s+(a.bulan[mi]||0);},0);
+    });
+    const grandTotal = anggota.reduce(function(s,a){
+      return s+a.bulan.reduce(function(ss,b){return ss+(b||0);},0);
+    },0);
+    rows.push(['','Total',''].concat(monthTotals).concat([grandTotal]));
 
-    XLSX.utils.book_append_sheet(wb,'Data',ws);
+    // Create worksheet from rows
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+    ws['!cols'] = [{wch:5},{wch:22},{wch:12}].concat(MONTHS.map(function(){return {wch:11};})).concat([{wch:10}]);
 
-    // Use blob download for maximum compatibility
-    const wbout = XLSX.write(wb, {bookType:'xlsx', type:'array'});
-    const blob = new Blob([wbout], {type:'application/octet-stream'});
+    // Create workbook manually
+    const wb = {
+      SheetNames: ['Data'],
+      Sheets: { 'Data': ws }
+    };
+
+    // Write and download
+    const wbout = XLSX.write(wb, {bookType:'xlsx', type:'binary'});
+    function s2ab(s){
+      const buf = new ArrayBuffer(s.length);
+      const view = new Uint8Array(buf);
+      for(let i=0; i<s.length; i++) view[i] = s.charCodeAt(i) & 0xFF;
+      return buf;
+    }
+    const blob = new Blob([s2ab(wbout)], {type:'application/octet-stream'});
     const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'kasir_mamah_'+new Date().toLocaleDateString('id-ID').replace(/\//g,'-')+'.xlsx';
-    document.body.appendChild(a);
-    a.click();
-    setTimeout(()=>{ URL.revokeObjectURL(url); document.body.removeChild(a); }, 1000);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'kasir_mamah_'+new Date().toLocaleDateString('id-ID').replace(/\//g,'-')+'.xlsx';
+    document.body.appendChild(link);
+    link.click();
+    setTimeout(function(){ URL.revokeObjectURL(url); document.body.removeChild(link); }, 1000);
     showToast('✅ Excel berhasil diunduh!');
   } catch(err){
-    console.error('Export error:',err);
+    console.error('Export error:', err);
     showToast('Gagal export: '+err.message,'error');
   }
 }
